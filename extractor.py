@@ -4,6 +4,7 @@ import os, io, json, base64, tempfile, re
 from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+from dotenv import load_dotenv
 
 import fitz  # PyMuPDF
 from pdf2image import convert_from_path
@@ -14,6 +15,9 @@ from langchain_openai import ChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain.schema import SystemMessage, HumanMessage
 
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY")
 # ---------------- Canonical schema ----------------
 CANONICAL_SCHEMA: Dict[str, Any] = {
   "order_metadata": {
@@ -165,9 +169,9 @@ class ProviderConfig:
 def make_llm(cfg: ProviderConfig):
     if cfg.provider == "openai":
         # response_format is enforced by ChatOpenAI via tool calling or JSON mode; we keep the output checked in code.
-        return ChatOpenAI(model=cfg.model, temperature=0)
+        return ChatOpenAI(model=cfg.model, temperature=0, api_key=openai_api_key)
     elif cfg.provider == "vertex":
-        return ChatVertexAI(model_name=cfg.model, temperature=0, location=cfg.location)
+        return ChatVertexAI(model_name=cfg.model, temperature=0, location=cfg.location, api_key=google_api_key)
     else:
         raise ValueError("provider must be 'openai' or 'vertex'")
 
@@ -182,7 +186,13 @@ def messages_for_images(schema: Dict[str, Any], b64_images: List[str]):
     content_parts: List[dict] = [{"type": "text", "text": build_user_instruction(schema)}]
     # Attach images
     for b64 in b64_images:
-        content_parts.append({"type": "image_url", "image_url": f"data:image/png;base64,{b64}"})
+        content_parts.append({
+            "type": "image_url", 
+            "image_url": {
+                "url": f"data:image/png;base64,{b64}",
+                "detail": "high"
+            }
+        })
     return [SystemMessage(content=SYSTEM), HumanMessage(content=content_parts)]
 
 # --------------- Extraction orchestrator ---------------
